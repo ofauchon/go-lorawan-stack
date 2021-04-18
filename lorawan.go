@@ -12,6 +12,11 @@
 //
 // The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
+
+/*
+ * LmicReset
+ * LmicStartJoining
+ */
 package lorawan
 
 import (
@@ -57,6 +62,11 @@ type LoraOtaa struct {
 	AppNonce [3]uint8
 	NetID    [3]uint8
 }
+
+const (
+	EVENT_JOINING = iota
+	EVENT_JOINED
+)
 
 // GenerateJoinRequest Generates a Lora Join request
 func (r *LoraWanStack) GenerateJoinRequest() ([]uint8, error) {

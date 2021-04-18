@@ -26,8 +26,7 @@ func TestJoinRequest(t *testing.T) {
 	l.Otaa.AppKey = [16]byte{0xB6, 0xB5, 0x3F, 0x4A, 0x16, 0x8A, 0x7A, 0x88, 0xBD, 0xF7, 0xEA, 0x13, 0x5C, 0xE9, 0xCF, 0xCA}
 	l.Otaa.DevNonce = [2]byte{0xCC, 0x85}
 
-	fmt.Printf("*** TEST#1: Join Request\n")
-	fmt.Printf("We'll try to encode a Lora Join Request packet  \n")
+	fmt.Printf("*** TEST#1: Encoding a join Request\n")
 	expected := "00DC0000D07ED5B3701E6FEDF57CEEAF0085CC587FE913"
 	tex, _ := hex.DecodeString(expected)
 
@@ -40,27 +39,24 @@ func TestJoinRequest(t *testing.T) {
 	fmt.Printf("Build    Join Request: %s\n", hex.EncodeToString(j[:]))
 	fmt.Printf("Expected Join Request: %s\n", hex.EncodeToString(tex[:]))
 
-	if bytes.Equal(j[:], tex[:]) {
-		fmt.Println("ALL TESTS OK")
-	} else {
-		fmt.Println("=> ERROR ENCODING Join Request : Bad generated payload !! ")
+	if !bytes.Equal(j[:], tex[:]) {
+		t.Errorf("Generated payload don't match exepted !! ")
 	}
 
 }
 
 func TestJoinAccept(t *testing.T) {
 
+	fmt.Printf(" We'll try to decode Lora Join Accept and check if sessions keys looks good")
+
 	l := &LoraWanStack{}
 	l.Otaa.AppEUI = [8]byte{0x70, 0xB3, 0xD5, 0x7E, 0xD0, 0x00, 0x00, 0xDC}
 	l.Otaa.DevEUI = [8]byte{0x00, 0xAF, 0xEE, 0x7C, 0xF5, 0xED, 0x6F, 0x1E}
 	l.Otaa.AppKey = [16]byte{0xB6, 0xB5, 0x3F, 0x4A, 0x16, 0x8A, 0x7A, 0x88, 0xBD, 0xF7, 0xEA, 0x13, 0x5C, 0xE9, 0xCF, 0xCA}
-	l.Otaa.DevNonce = [2]byte{0xCC, 0x85}
-
+	l.Otaa.DevNonce = [2]byte{0x85, 0xCC}
+		
 	packet := "204DD85AE608B87FC4889970B7D2042C9E72959B0057AED6094B16003DF12DE145"
 	t1, _ := hex.DecodeString(packet)
-
-	fmt.Println("*** TEST#2 : Join Accept ")
-	fmt.Printf(" We'll try to decode encrypted Lora Join Accept packet  (%s)\n", hex.EncodeToString(t1[:]))
 
 	err := l.DecodeJoinAccept(t1)
 	if err == nil {
@@ -80,11 +76,13 @@ func TestJoinAccept(t *testing.T) {
 		// What we expext to get
 		t1, _ := hex.DecodeString("2C96F7028184BB0BE8AA49275290D4FC") //NwkSKey
 		t2, _ := hex.DecodeString("F3A5C8F0232A38C144029C165865802C") //AppSKey
+		fmt.Printf("Expected   AppSkey: %s\n", hex.EncodeToString(t2[:]))
+		fmt.Printf("Expected   NwkSKey: %s\n", hex.EncodeToString(t1[:]))
 
 		if bytes.Equal(l.Session.NwkSKey[:], t1) && bytes.Equal(l.Session.AppSKey[:], t2) {
-			fmt.Println("ALL TESTS OK")
+			fmt.Println("Test OK")
 		} else {
-			fmt.Println("=> ERROR DECODING Join Accept : BAD NwkSKey or AppSKey !! ")
+			t.Errorf("NwkSKey or AppSKey don't match ! ")
 		}
 
 	} else {
@@ -100,16 +98,19 @@ func TestUplinkMessage(t *testing.T) {
 	l.Otaa.DevEUI = [8]byte{0x00, 0xAF, 0xEE, 0x7C, 0xF5, 0xED, 0x6F, 0x1E}
 	l.Otaa.AppKey = [16]byte{0xB6, 0xB5, 0x3F, 0x4A, 0x16, 0x8A, 0x7A, 0x88, 0xBD, 0xF7, 0xEA, 0x13, 0x5C, 0xE9, 0xCF, 0xCA}
 	l.Otaa.DevNonce = [2]byte{0x85, 0xCC}
+	msg := []byte("TinygoLorawan")
 
-	fmt.Printf("*** TEST#1: Join Request\n")
-	msg := []byte("aaabbb")
+	fmt.Printf("*** TEST#3: Unconfirmed Uplink Message\n")
 	fmt.Printf("We'll try to following payload '%s'[%s]\n", msg, hex.EncodeToString(msg[:]))
 
 	payload, err := l.GenMessage(0, msg)
+	// TODO add byte comparison check
 	if err == nil {
 		fmt.Printf("UplinkMessage: %s\n", hex.EncodeToString(payload[:]))
 	} else {
 		println("testUplinkMEssage error", err)
+		t.Errorf("Error while generating UplinkMessage")
+
 	}
 
 }
