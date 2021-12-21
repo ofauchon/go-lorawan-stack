@@ -31,9 +31,12 @@ import (
 
 // todo: Tests and examples
 
+const TIMEOUT = 1
+
 type LoraWanStack struct {
 	Session LoraSession
 	Otaa    LoraOtaa
+	radio   LoraRadio
 }
 
 type LoraEvent struct {
@@ -67,6 +70,14 @@ const (
 	EVENT_JOINING = iota
 	EVENT_JOINED
 )
+
+
+// SetOOTA configure AppEUI, DevEUI, AppKey for the device
+func (r *LoraWanStack) SetOtaa(appEUI [8]uint8, devEUI [8]uint8, appKey [16]uint8) {
+	r.Otaa.AppEUI = appEUI
+	r.Otaa.DevEUI = devEUI
+	r.Otaa.AppKey = appKey
+}
 
 // GenerateJoinRequest Generates a Lora Join request
 func (r *LoraWanStack) GenerateJoinRequest() ([]uint8, error) {
@@ -243,10 +254,75 @@ func (r *LoraWanStack) calcMessageMIC(payload []uint8, key [16]uint8, dir uint8,
 	return mic
 }
 
-// revertByteArray inverts de order of a given byte slice
-func revertByteArray(s []byte) []byte {
-	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
-		s[i], s[j] = s[j], s[i]
+// AttachLoraRadio registers the Lora Radio Driver
+func (r *LoraWanStack) AttachLoraRadio(pRadio LoraRadio) {
+	r.radio = pRadio
+}
+
+//LoraWanJoin() initiate a Lorawan JOIN sequence
+func (r *LoraWanStack) LoraWanJoin() error {
+	var resp []uint8
+
+	if r.radio == nil{
+		return errors.New("No lora Radio attached")
 	}
-	return s
+
+	// Send join packet
+	println("lorawan: Start JOIN sequence")
+	payload, err := r.GenerateJoinRequest()
+	if err != nil {
+		return err
+	}
+	println("lorawan: Send JOIN request ", bytesToHexString(payload))
+	r.radio.SetLoraCrc(true)
+	r.radio.SetLoraIqMode(0) // IQ Standard
+	r.radio.LoraTx(payload, TIMEOUT)
+	if err != nil {
+		return err
+	}
+
+	// Wait for JoinAccept
+	println("lorawan: Wait for JOINACCEPT for 10s")
+	r.radio.SetLoraIqMode(1) // IQ Inverted
+	for i := 0; i < 10; i++ {
+		resp, err = r.radio.LoraRx(TIMEOUT)
+		if err != nil {
+			return err
+		}
+		if resp != nil {
+			break
+		}
+	}
+	if resp == nil {
+		errors.New("No JoinAccept packet received")
+	}
+	println("lorawan: Received packet:", bytesToHexString(resp))
+
+	err = r.DecodeJoinAccept(resp)
+	if err != nil {
+		return err
+	}
+	println("lorawan: Valid JOINACCEPT, now connected")
+	println("lorawan: |  DevAddr: ", bytesToHexString(r.Session.DevAddr[:]), " (LSB)")
+	println("lorawan: |  NetID  : ", bytesToHexString(r.Otaa.NetID[:]))
+	println("lorawan: |  NwkSKey: ", bytesToHexString(r.Session.NwkSKey[:]))
+	println("lorawan: |  AppSKey: ", bytesToHexString(r.Session.AppSKey[:]))
+
+	return nil
+}
+
+//LoraWanJoin() initiate a Lorawan JOIN sequence
+func (r *LoraWanStack) LoraSendUplink(data []uint8) error {
+	println("lorawan: Send UPLINK  ", bytesToHexString(data))
+	payload, err := r.GenMessage(0, []byte(data))
+	if err != nil {
+		return err
+	}
+	r.radio.SetLoraCrc(true)
+	r.radio.SetLoraIqMode(0) // IQ Standard
+	r.radio.LoraTx(payload, TIMEOUT)
+	if err != nil {
+		return err
+	}
+	return nil
 }
