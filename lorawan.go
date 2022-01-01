@@ -31,7 +31,7 @@ import (
 
 // todo: Tests and examples
 
-const TIMEOUT = 1
+const LORA_RXTX_TIMEOUT = 1000
 
 type LoraWanStack struct {
 	Session LoraSession
@@ -70,7 +70,6 @@ const (
 	EVENT_JOINING = iota
 	EVENT_JOINED
 )
-
 
 // SetOOTA configure AppEUI, DevEUI, AppKey for the device
 func (r *LoraWanStack) SetOtaa(appEUI [8]uint8, devEUI [8]uint8, appKey [16]uint8) {
@@ -160,12 +159,14 @@ func (r *LoraWanStack) GenMessage(dir uint8, payload []uint8) ([]uint8, error) {
 	buf = append(buf, 0b01000000) // FHDR Unconfirmed up
 	buf = append(buf, r.Session.DevAddr[:]...)
 	buf = append(buf, 0x00)                                                            // FCtl : No ADR, No RFU, No ACK, No FPending, No FOpt
-	buf = append(buf, uint8((r.Session.FCntUp>>8)&0xFF), uint8(r.Session.FCntUp&0xFF)) // FCnt Up
+	buf = append(buf, uint8(r.Session.FCntUp&0xFF), uint8((r.Session.FCntUp>>8)&0xFF)) // FCnt Up
 	buf = append(buf, 0x01)                                                            // FPort=1
 
 	fCnt := uint32(0)
 	if dir == 0 {
+		println("dir", dir, "fcntup", r.Session.FCntUp)
 		fCnt = r.Session.FCntUp
+		r.Session.FCntUp++
 	} else {
 		fCnt = r.Session.FCntDown
 	}
@@ -263,7 +264,7 @@ func (r *LoraWanStack) AttachLoraRadio(pRadio LoraRadio) {
 func (r *LoraWanStack) LoraWanJoin() error {
 	var resp []uint8
 
-	if r.radio == nil{
+	if r.radio == nil {
 		return errors.New("No lora Radio attached")
 	}
 
@@ -276,7 +277,7 @@ func (r *LoraWanStack) LoraWanJoin() error {
 	println("lorawan: Send JOIN request ", bytesToHexString(payload))
 	r.radio.SetLoraCrc(true)
 	r.radio.SetLoraIqMode(0) // IQ Standard
-	r.radio.LoraTx(payload, TIMEOUT)
+	r.radio.LoraTx(payload, LORA_RXTX_TIMEOUT)
 	if err != nil {
 		return err
 	}
@@ -285,7 +286,7 @@ func (r *LoraWanStack) LoraWanJoin() error {
 	println("lorawan: Wait for JOINACCEPT for 10s")
 	r.radio.SetLoraIqMode(1) // IQ Inverted
 	for i := 0; i < 10; i++ {
-		resp, err = r.radio.LoraRx(TIMEOUT)
+		resp, err = r.radio.LoraRx(LORA_RXTX_TIMEOUT)
 		if err != nil {
 			return err
 		}
@@ -320,7 +321,7 @@ func (r *LoraWanStack) LoraSendUplink(data []uint8) error {
 	}
 	r.radio.SetLoraCrc(true)
 	r.radio.SetLoraIqMode(0) // IQ Standard
-	r.radio.LoraTx(payload, TIMEOUT)
+	r.radio.LoraTx(payload, LORA_RXTX_TIMEOUT)
 	if err != nil {
 		return err
 	}

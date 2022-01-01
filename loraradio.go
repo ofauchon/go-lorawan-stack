@@ -1,8 +1,8 @@
 package lorawan
 
 type LoraRadio interface {
-	LoraTx(pkt []uint8, timeoutSec uint8) error
-	LoraRx(timeoutSec uint8) ([]uint8, error)
+	LoraTx(pkt []uint8, timeoutMs uint32) error
+	LoraRx(timeoutMs uint32) ([]uint8, error)
 	SetLoraFrequency(freq uint32)
 	SetLoraIqMode(mode uint8)
 	SetLoraCodingRate(cr uint8)
