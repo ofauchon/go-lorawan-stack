@@ -93,6 +93,9 @@ func (r *LoraWanStack) GenerateJoinRequest() ([]uint8, error) {
 
 // DecodeJoinAccept Decodes a Lora Join Accept packet
 func (r *LoraWanStack) DecodeJoinAccept(phyPload []uint8) error {
+	if len(phyPload) < 12 {
+		return errors.New("Bad packet")
+	}
 	data := phyPload[1:] // Remove trailing 0x20
 	// Prepare AES Cipher
 	block, err := aes.NewCipher(r.Otaa.AppKey[:])
@@ -285,7 +288,7 @@ func (r *LoraWanStack) LoraWanJoin() error {
 	// Wait for JoinAccept
 	println("lorawan: Wait for JOINACCEPT for 10s")
 	r.radio.SetLoraIqMode(1) // IQ Inverted
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 15; i++ {
 		resp, err = r.radio.LoraRx(LORA_RXTX_TIMEOUT)
 		if err != nil {
 			return err
@@ -295,9 +298,9 @@ func (r *LoraWanStack) LoraWanJoin() error {
 		}
 	}
 	if resp == nil {
-		errors.New("No JoinAccept packet received")
+		return errors.New("No JoinAccept packet received")
 	}
-	println("lorawan: Received packet:", bytesToHexString(resp))
+	println("lorawan: Received packet: len=", len(resp), "payload=", bytesToHexString(resp))
 
 	err = r.DecodeJoinAccept(resp)
 	if err != nil {
