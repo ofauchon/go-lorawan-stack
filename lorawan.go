@@ -23,13 +23,16 @@ import (
 	"bytes"
 	"crypto/aes"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"math"
-
-	"github.com/jacobsa/crypto/cmac"
 )
 
 // todo: Tests and examples
+
+const (
+	DEBUG = true
+)
 
 const LORA_RXTX_TIMEOUT = 1000
 
@@ -93,10 +96,14 @@ func (r *LoraWanStack) GenerateJoinRequest() ([]uint8, error) {
 
 // DecodeJoinAccept Decodes a Lora Join Accept packet
 func (r *LoraWanStack) DecodeJoinAccept(phyPload []uint8) error {
+	if DEBUG {
+		println("lorawan DecodeJoinAccept: size:", len(phyPload), " data:", hex.EncodeToString(phyPload))
+	}
 	if len(phyPload) < 12 {
 		return errors.New("Bad packet")
 	}
 	data := phyPload[1:] // Remove trailing 0x20
+
 	// Prepare AES Cipher
 	block, err := aes.NewCipher(r.Otaa.AppKey[:])
 	if err != nil {
@@ -106,6 +113,7 @@ func (r *LoraWanStack) DecodeJoinAccept(phyPload []uint8) error {
 	for k := 0; k < len(data)/aes.BlockSize; k++ {
 		block.Encrypt(buf[k*aes.BlockSize:], data[k*aes.BlockSize:])
 	}
+
 	copy(r.Otaa.AppNonce[:], buf[0:3])
 	copy(r.Otaa.NetID[:], buf[3:6])
 	copy(r.Session.DevAddr[:], buf[6:10])
@@ -129,7 +137,6 @@ func (r *LoraWanStack) DecodeJoinAccept(phyPload []uint8) error {
 	if !bytes.Equal(computedMic[:], rxMic[:]) {
 		return errors.New("Wrong Mic")
 	}
-
 	// Generate NwkSKey
 	// NwkSKey = aes128_encrypt(AppKey, 0x01|AppNonce|NetID|DevNonce|pad16)
 	sKey := []byte{}
@@ -227,7 +234,7 @@ func (r *LoraWanStack) genFRMPayload(dir uint8, addr []uint8, fCnt uint32, paylo
 // getPayloadMIC computes MIC given the payload and the key
 func (r *LoraWanStack) genPayloadMIC(payload []uint8, key [16]uint8) [4]uint8 {
 	var mic [4]uint8
-	hash, _ := cmac.New(key[:])
+	hash, _ := NewCmac(key[:])
 	hash.Write(payload)
 	hb := hash.Sum([]byte{})
 	copy(mic[:], hb[0:4])
@@ -251,7 +258,7 @@ func (r *LoraWanStack) calcMessageMIC(payload []uint8, key [16]uint8, dir uint8,
 	full = append(full, payload...)
 
 	var mic [4]uint8
-	hash, _ := cmac.New(key[:])
+	hash, _ := NewCmac(key[:])
 	hash.Write(full)
 	hb := hash.Sum([]byte{})
 	copy(mic[:], hb[0:4])
@@ -265,6 +272,9 @@ func (r *LoraWanStack) AttachLoraRadio(pRadio LoraRadio) {
 
 //LoraWanJoin() initiate a Lorawan JOIN sequence
 func (r *LoraWanStack) LoraWanJoin() error {
+	if DEBUG {
+		println("lorawan: LoraWanJoin start")
+	}
 	var resp []uint8
 
 	if r.radio == nil {
@@ -329,4 +339,27 @@ func (r *LoraWanStack) LoraSendUplink(data []uint8) error {
 		return err
 	}
 	return nil
+}
+
+//LoraWanJoin() initiate a Lorawan JOIN sequence
+func (r *LoraWanStack) LoraListenDownlink() ([]uint8, error) {
+
+	// Wait for DownLink
+	println("lorawan: Wait for Downlink for 5s")
+	r.radio.SetLoraIqMode(1) // IQ Inverted
+	var resp []uint8
+	var err error
+	for i := 0; i < 5; i++ {
+		resp, err = r.radio.LoraRx(LORA_RXTX_TIMEOUT)
+		if err != nil {
+			return nil, err
+		}
+		if resp != nil {
+			break
+		}
+	}
+	if resp == nil {
+		return nil, errors.New("No Downlink")
+	}
+	return resp, nil
 }
